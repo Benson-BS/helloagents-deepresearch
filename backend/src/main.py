@@ -6,14 +6,21 @@ import json
 import sys
 from typing import Any, Dict, Iterator, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from config import Configuration, SearchAPI
-from agent import DeepResearchAgent
+load_dotenv()
+
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
+
+from agent import DeepResearchAgent  # noqa: E402
+from config import Configuration, SearchAPI  # noqa: E402
 
 # 添加控制台日志处理程序
 logger.add(
