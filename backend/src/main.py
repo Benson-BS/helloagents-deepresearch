@@ -12,8 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
-
-load_dotenv()
+from pathlib import Path
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
