@@ -219,6 +219,7 @@ class DeepResearchAgent:
                     enqueue(event, task=task)
             except Exception as exc:  # pragma: no cover - defensive guardrail
                 logger.exception("Task execution failed", exc_info=exc)
+                task.status = "failed"
                 enqueue(
                     {
                         "type": "task_status",
@@ -263,6 +264,13 @@ class DeepResearchAgent:
             self._set_tool_event_sink(None)
             for thread in threads:
                 thread.join()
+
+        if state.todo_items and all(task.status == "failed" for task in state.todo_items):
+            yield {
+                "type": "error",
+                "detail": "所有研究任务均执行失败，请查看各任务的失败原因。",
+            }
+            return
 
         report = self.reporting.generate_report(state)
         final_step = len(state.todo_items) + 1

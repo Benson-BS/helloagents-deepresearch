@@ -140,9 +140,9 @@
       >
         <header class="status-bar">
           <div class="status-main">
-            <div class="status-chip" :class="{ active: loading }">
+            <div class="status-chip" :class="{ active: loading, failed: !loading && (failedTasks > 0 || !!error) }">
               <span class="dot"></span>
-              {{ loading ? "研究进行中" : "研究流程完成" }}
+              {{ workflowStatusLabel }}
             </div>
             <span class="status-meta">
               任务进度：{{ completedTasks }} / {{ totalTasks || todoTasks.length || 1 }}
@@ -155,6 +155,8 @@
             </button>
           </div>
         </header>
+
+        <p v-if="error" class="error-chip workflow-error">{{ error }}</p>
 
         <div class="timeline-wrapper" v-show="!logsCollapsed && progressLogs.length">
           <transition-group name="timeline" tag="ul" class="timeline">
@@ -223,6 +225,11 @@
                 </span>
               </div>
             </header>
+
+            <section v-if="currentTask.status === 'failed'" class="task-notices task-failure">
+              <h4>失败原因</h4>
+              <p>{{ currentTask.failureDetail || "任务执行失败，请查看后端日志。" }}</p>
+            </section>
 
             <section v-if="currentTask && currentTask.notices.length" class="task-notices">
               <h4>系统提示</h4>
@@ -367,6 +374,7 @@ interface TodoTaskView {
   intent: string;
   query: string;
   status: string;
+  failureDetail: string;
   summary: string;
   sourcesSummary: string;
   sourceItems: SourceItem[];
@@ -410,7 +418,8 @@ const TASK_STATUS_LABEL: Record<string, string> = {
   pending: "待执行",
   in_progress: "进行中",
   completed: "已完成",
-  skipped: "已跳过"
+  skipped: "已跳过",
+  failed: "失败"
 };
 
 function formatTaskStatus(status: string): string {
@@ -421,6 +430,20 @@ const totalTasks = computed(() => todoTasks.value.length);
 const completedTasks = computed(() =>
   todoTasks.value.filter((task) => task.status === "completed").length
 );
+const failedTasks = computed(() =>
+  todoTasks.value.filter((task) => task.status === "failed").length
+);
+const workflowStatusLabel = computed(() => {
+  if (loading.value) return "研究进行中";
+  if (error.value || (totalTasks.value > 0 && failedTasks.value === totalTasks.value)) {
+    return "研究失败";
+  }
+  if (failedTasks.value > 0) return "部分任务失败";
+  if (totalTasks.value > 0 && completedTasks.value < totalTasks.value) {
+    return "研究流程结束";
+  }
+  return "研究流程完成";
+});
 
 const currentTask = computed(() => {
   if (activeTaskId.value !== null) {
@@ -752,6 +775,7 @@ const handleSubmit = async () => {
                 typeof item.status === "string" && item.status.trim()
                   ? item.status.trim()
                   : "pending",
+              failureDetail: "",
               summary: "",
               sourcesSummary: "",
               sourceItems: [],
@@ -787,6 +811,7 @@ const handleSubmit = async () => {
           task.status = status;
 
           if (status === "in_progress") {
+            task.failureDetail = "";
             task.summary = "";
             task.sourcesSummary = "";
             task.sourceItems = [];
@@ -811,6 +836,12 @@ const handleSubmit = async () => {
             }
           } else if (status === "skipped") {
             progressLogs.value.push(`任务跳过：${task.title}`);
+          } else if (status === "failed") {
+            task.failureDetail =
+              typeof event.detail === "string" && event.detail.trim()
+                ? event.detail.trim()
+                : "任务执行失败，请查看后端日志。";
+            progressLogs.value.push(`任务失败：${task.title} — ${task.failureDetail}`);
           }
           return;
         }
@@ -941,7 +972,7 @@ const handleSubmit = async () => {
       { signal: controller.signal }
     );
 
-    if (!reportMarkdown.value) {
+    if (!reportMarkdown.value && !error.value) {
       reportMarkdown.value = "暂无生成的报告";
     }
   } catch (err) {
@@ -1296,6 +1327,11 @@ select:focus {
   fill: currentColor;
 }
 
+.workflow-error {
+  margin-top: 0;
+  align-self: flex-start;
+}
+
 .panel-result {
   display: flex;
   flex-direction: column;
@@ -1339,6 +1375,17 @@ select:focus {
   background: rgba(129, 140, 248, 0.2);
   border-color: rgba(129, 140, 248, 0.4);
   color: #1e293b;
+}
+
+.status-chip.failed {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #b91c1c;
+}
+
+.status-chip.failed .dot {
+  background: #dc2626;
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.3);
 }
 
 .status-chip .dot {
@@ -1536,7 +1583,8 @@ select:focus {
   color: #15803d;
 }
 
-.task-status.skipped {
+.task-status.skipped,
+.task-status.failed {
   background: rgba(248, 113, 113, 0.18);
   color: #b91c1c;
 }
@@ -1646,6 +1694,18 @@ select:focus {
   border-radius: 16px;
   padding: 14px 18px;
   color: #1f2937;
+}
+
+.task-notices.task-failure {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #991b1b;
+  overflow-wrap: anywhere;
+}
+
+.task-failure p {
+  margin: 0;
+  font-size: 13px;
 }
 
 .task-notices h4 {
